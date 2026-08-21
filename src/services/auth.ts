@@ -46,7 +46,7 @@ function toProfile(row: ProfileRow): Profile {
 export class AuthError extends Error {}
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const STRONG_PASSWORD = /^(?=\S{12,72}$)(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).*$/;
+const STRONG_PASSWORD = /^(?=\S{8,72}$)(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).*$/;
 
 function normalizeEmail(email: string): string {
   const normalized = email.trim().toLowerCase();
@@ -57,7 +57,7 @@ function normalizeEmail(email: string): string {
 export function validateNewPassword(password: string): string | null {
   return STRONG_PASSWORD.test(password)
     ? null
-    : "Use 12 or more characters with uppercase, lowercase, a number and a symbol.";
+    : "Use 8 or more characters with uppercase, lowercase, a number and a symbol.";
 }
 
 function guardConfigured() {
