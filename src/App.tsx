@@ -14,11 +14,13 @@ import { MySidequests } from "./components/MySidequests";
 import { Profile } from "./components/Profile";
 import { AuthModal } from "./components/AuthModal";
 import { CityPrompt } from "./components/CityPrompt";
+import { AdminPanel } from "./components/AdminPanel";
 import { useAuth } from "./context/AuthContext";
 import { useReveal } from "./hooks/useReveal";
 import { tripsService } from "./services/trips";
 import { searchLocations, recordSearch } from "./services/locations";
 import { setDisplayCurrency } from "./lib/format";
+import { recordPageView } from "./services/analytics";
 import type { Location } from "./types/location";
 import {
   aiLabel,
@@ -107,11 +109,19 @@ export default function App() {
     void isAIAvailable().then(setAiAvailable);
   }, []);
   useEffect(() => {
-    if (!user && (view === "saved" || view === "profile")) {
+    if (!user && (view === "saved" || view === "profile" || view === "admin")) {
+      setView("home");
+      setStage("home");
+    }
+    if (view === "admin" && !user?.isAdmin) {
       setView("home");
       setStage("home");
     }
   }, [user, view]);
+
+  useEffect(() => {
+    void recordPageView(view === "admin" ? "/admin" : `/${view}`);
+  }, [view]);
 
   const selected = recs.find((r) => r.id === selectedId) ?? recs[0];
 
@@ -650,6 +660,7 @@ export default function App() {
 
       {view === "saved" && <MySidequests onStart={goHome} onOpen={openSavedTrip} />}
       {view === "profile" && <Profile />}
+      {view === "admin" && <AdminPanel />}
 
       {view === "home" && stage === "home" && (
         <>

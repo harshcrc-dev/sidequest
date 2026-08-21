@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Icon } from "./Icon";
 
-export type View = "home" | "results" | "saved" | "profile";
+export type View = "home" | "results" | "saved" | "profile" | "admin";
 
 export function Navigation({
   onNavigate,
@@ -57,6 +57,7 @@ export function Navigation({
               <button className="nav__avatar" onClick={() => onNavigate("profile")}>
                 {user.name.charAt(0).toUpperCase()}
               </button>
+              {user.isAdmin && <button className="nav__signin" onClick={() => onNavigate("admin")}>Admin</button>}
               <button className="nav__signin" onClick={() => void signOut()}>
                 Sign out
               </button>

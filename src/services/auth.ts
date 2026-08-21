@@ -15,6 +15,7 @@ export interface ProfilePreferences {
 
 export interface Profile {
   id: string;
+  isAdmin: boolean;
   fullName: string;
   avatarUrl: string | null;
   homeCity: string | null;
@@ -28,6 +29,7 @@ export interface Profile {
 function toProfile(row: ProfileRow): Profile {
   return {
     id: row.id,
+    isAdmin: row.is_admin,
     fullName: row.full_name ?? "Traveller",
     avatarUrl: row.avatar_url,
     homeCity: row.home_city,

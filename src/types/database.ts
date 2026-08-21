@@ -12,6 +12,7 @@ export type Json =
 
 export type ProfileRow = {
   id: string;
+  is_admin: boolean;
   full_name: string | null;
   avatar_url: string | null;
   home_city: string | null;
@@ -88,6 +89,23 @@ export type ApiRateLimitRow = {
   window_started_at: string;
 }
 
+export type PageViewRow = {
+  id: string;
+  path: string;
+  referrer: string | null;
+  session_id: string;
+  user_id: string | null;
+  created_at: string;
+}
+
+export type SiteSettingsRow = {
+  id: string;
+  site_name: string;
+  announcement: string;
+  maintenance_mode: boolean;
+  updated_at: string;
+}
+
 type TableConfig<Row, Insert, Update> = {
   Row: Row;
   Insert: Insert;
@@ -119,6 +137,16 @@ export interface Database {
         ApiRateLimitRow,
         Partial<ApiRateLimitRow> & { key_hash: string },
         Partial<ApiRateLimitRow>
+      >;
+      page_views: TableConfig<
+        PageViewRow,
+        Partial<PageViewRow> & { path: string; session_id: string },
+        Partial<PageViewRow>
+      >;
+      site_settings: TableConfig<
+        SiteSettingsRow,
+        Partial<SiteSettingsRow>,
+        Partial<SiteSettingsRow>
       >;
     };
     Views: Record<string, never>;
