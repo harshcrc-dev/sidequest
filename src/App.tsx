@@ -48,6 +48,10 @@ import type {
 
 type Stage = "home" | "loading" | "results" | "nearby" | "longtrip";
 
+function initialView(): View {
+  return window.location.pathname === "/admin" ? "admin" : "home";
+}
+
 // Phrases that are not a real, geocodable place. We must never plan for these
 // as if they were a city; they signal "use my location" instead.
 const VAGUE_PLACE = /^(current location|my location|here|near me|nearby|around me|somewhere)$/i;
@@ -83,7 +87,7 @@ function hoursBetween(start: string, end: string): number {
 
 export default function App() {
   const { user, profile } = useAuth();
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>(initialView);
   const [stage, setStage] = useState<Stage>("home");
 
   const [intent, setIntent] = useState<TripIntent | null>(null);
