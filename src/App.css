@@ -5,6 +5,10 @@
   flex-direction: column;
   overflow-x: clip;
 }
+.container {
+  width: min(100% - 32px, var(--maxw));
+  margin-inline: auto;
+}
 .btn {
   display: inline-flex;
   align-items: center;
