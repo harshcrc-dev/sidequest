@@ -1,5 +1,5 @@
 import { searchEvents } from "./_lib/generate.mjs";
-import { allowCors, enforceRateLimit, type ApiRequest, type ApiResponse } from "./_lib/http";
+import { allowCors, enforceRateLimit, type ApiRequest, type ApiResponse } from "./_lib/http.js";
 
 export const config = { maxDuration: 10 };
 

@@ -11,7 +11,7 @@ import {
   validateJsonRequest,
   type ApiRequest as Req,
   type ApiResponse as Res,
-} from "../_lib/http";
+} from "../_lib/http.js";
 
 export const config = { maxDuration: 60 };
 
