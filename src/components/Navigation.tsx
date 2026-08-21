@@ -55,7 +55,7 @@ export function Navigation({
           {user ? (
             <>
               <button className="nav__avatar" onClick={() => onNavigate("profile")}>
-                {user.name.charAt(0).toUpperCase()}
+                {user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : user.name.charAt(0).toUpperCase()}
               </button>
               {user.isAdmin && <button className="nav__signin" onClick={() => onNavigate("admin")}>Admin</button>}
               <button className="nav__signin" onClick={() => void signOut()}>

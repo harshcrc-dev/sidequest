@@ -339,6 +339,13 @@
   font-weight: 700;
   font-size: 14px;
 }
+.nav__avatar img,
+.profile__avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
 @media (max-width: 860px) {
   .nav__links {
     display: none;

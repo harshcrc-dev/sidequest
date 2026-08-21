@@ -18,6 +18,7 @@ export interface AppUser {
   name: string;
   email: string;
   isAdmin: boolean;
+  avatarUrl: string | null;
 }
 
 interface AuthValue {
@@ -54,6 +55,7 @@ function toAppUser(supUser: SupabaseUser | null, profile: Profile | null): AppUs
     name: profile?.fullName || metaName || supUser.email?.split("@")[0] || "Traveller",
     email: supUser.email ?? "",
     isAdmin: profile?.isAdmin ?? false,
+    avatarUrl: profile?.avatarUrl ?? (supUser.user_metadata?.avatar_url as string | null) ?? null,
   };
 }
 

@@ -128,7 +128,9 @@ export function Profile() {
           <h1 className="page__title">{user.name}</h1>
           <span className="profile__email">{user.email}</span>
         </div>
-        <div className="profile__avatar">{user.name.charAt(0).toUpperCase()}</div>
+        <div className="profile__avatar">
+          {user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : user.name.charAt(0).toUpperCase()}
+        </div>
       </div>
 
       <section className="panel">
