@@ -134,22 +134,6 @@ export const authService = {
     if (error) throw new AuthError("We couldn't start social sign in. Please try again.");
   },
 
-  async sendPhoneOtp(phone: string): Promise<void> {
-    guardConfigured();
-    const normalized = phone.trim();
-    if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
-      throw new AuthError("Enter a phone number with country code, like +14155552671.");
-    }
-    const { error } = await supabase.auth.signInWithOtp({ phone: normalized });
-    if (error) throw new AuthError("We couldn't send the code. Check the number and try again.");
-  },
-
-  async verifyPhoneOtp(phone: string, token: string): Promise<void> {
-    guardConfigured();
-    const { error } = await supabase.auth.verifyOtp({ phone: phone.trim(), token: token.trim(), type: "sms" });
-    if (error) throw new AuthError("That code is invalid or expired. Request a new one.");
-  },
-
   async signOut(): Promise<void> {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -191,8 +175,8 @@ export const authService = {
     if (
       error ||
       !user?.id ||
-      !(user.email || user.phone) ||
-      !(user.email_confirmed_at || user.phone_confirmed_at) ||
+      !user.email ||
+      !user.email_confirmed_at ||
       (expectedUserId && user.id !== expectedUserId)
     ) {
       throw new AuthError("Your secure session has expired. Sign in again.");

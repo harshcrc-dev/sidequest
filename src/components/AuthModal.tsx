@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { AuthError, validateNewPassword } from "../services/auth";
 import { Icon } from "./Icon";
 
-type Mode = "login" | "register" | "forgot" | "phone" | "phone-code";
+type Mode = "login" | "register" | "forgot";
 
 function friendlyError(err: unknown): string {
   if (err instanceof AuthError) return err.message;
@@ -19,12 +19,10 @@ export function AuthModal({
   onAuthed?: () => void;
   reason?: string;
 }) {
-  const { signIn, signUp, resetPassword, signInWithProvider, sendPhoneOtp, verifyPhoneOtp, configured } = useAuth();
+  const { signIn, signUp, resetPassword, signInWithProvider, configured } = useAuth();
   const [mode, setMode] = useState<Mode>("register");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
@@ -56,38 +54,8 @@ export function AuthModal({
       setError("Accounts aren't set up yet. Add your Supabase keys to enable sign in.");
       return;
     }
-    if (!emailValid && mode !== "phone" && mode !== "phone-code") {
+    if (!emailValid) {
       setError("That email address doesn't look right.");
-      return;
-    }
-    if (mode === "phone") {
-      setBusy(true);
-      try {
-        await sendPhoneOtp(phone);
-        setMode("phone-code");
-        setNotice("We sent a verification code to your phone.");
-      } catch (err) {
-        setError(friendlyError(err));
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    if (mode === "phone-code") {
-      if (!/^\d{6}$/.test(otp.trim())) {
-        setError("Enter the 6-digit verification code.");
-        return;
-      }
-      setBusy(true);
-      try {
-        await verifyPhoneOtp(phone, otp);
-        onAuthed?.();
-        onClose();
-      } catch (err) {
-        setError(friendlyError(err));
-      } finally {
-        setBusy(false);
-      }
       return;
     }
     if (mode !== "forgot" && !password) {
@@ -136,11 +104,7 @@ export function AuthModal({
       ? "Create your account"
       : mode === "login"
         ? "Welcome back"
-        : mode === "forgot"
-          ? "Reset your password"
-          : mode === "phone-code"
-            ? "Enter your code"
-            : "Sign in with your phone";
+        : "Reset your password";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -187,7 +151,7 @@ export function AuthModal({
                 />
               </label>
             )}
-            {mode !== "phone" && mode !== "phone-code" && <label className="field">
+            <label className="field">
               <span>Email</span>
               <input
                 type="email"
@@ -198,16 +162,8 @@ export function AuthModal({
                   maxLength={254}
                 required
               />
-            </label>}
-            {(mode === "phone" || mode === "phone-code") && <label className="field">
-              <span>Phone number</span>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+14155552671" autoComplete="tel" disabled={mode === "phone-code"} required />
-            </label>}
-            {mode === "phone-code" && <label className="field">
-              <span>Verification code</span>
-              <input inputMode="numeric" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="123456" autoComplete="one-time-code" required />
-            </label>}
-            {mode !== "forgot" && mode !== "phone" && mode !== "phone-code" && (
+            </label>
+            {mode !== "forgot" && (
               <label className="field">
                 <span>Password</span>
                 <input
@@ -255,9 +211,7 @@ export function AuthModal({
                     ? "Sign in"
                     : mode === "forgot"
                       ? "Send reset link"
-                      : mode === "phone"
-                        ? "Send code"
-                        : "Verify code"}
+                      : "Send reset link"}
             </button>
           </form>
 
@@ -265,7 +219,6 @@ export function AuthModal({
             <div className="auth__providers">
               <button type="button" className="btn btn--ghost btn--full" onClick={() => void signInWithProvider("google")}>Continue with Google</button>
               <button type="button" className="btn btn--ghost btn--full" onClick={() => void signInWithProvider("apple")}>Continue with Apple</button>
-              <button type="button" className="btn btn--ghost btn--full" onClick={() => { setError(""); setNotice(""); setMode("phone"); }}>Continue with phone</button>
             </div>
           )}
 
@@ -276,11 +229,7 @@ export function AuthModal({
           )}
 
           <div className="auth__switch">
-            {mode === "phone-code" ? (
-              <button onClick={() => setMode("phone")}>Use a different number</button>
-            ) : mode === "phone" ? (
-              <button onClick={() => setMode("login")}>Back to email sign in</button>
-            ) : mode === "register" ? (
+            {mode === "register" ? (
               <>
                 Already have an account?{" "}
                 <button onClick={() => setMode("login")}>Sign in</button>

@@ -27,8 +27,6 @@ interface AuthValue {
   configured: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithProvider: (provider: "google" | "apple") => Promise<void>;
-  sendPhoneOtp: (phone: string) => Promise<void>;
-  verifyPhoneOtp: (phone: string, token: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<{ authenticated: boolean }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -54,7 +52,7 @@ function toAppUser(supUser: SupabaseUser | null, profile: Profile | null): AppUs
   return {
     id: supUser.id,
     name: profile?.fullName || metaName || supUser.email?.split("@")[0] || "Traveller",
-    email: supUser.email ?? supUser.phone ?? "",
+    email: supUser.email ?? "",
     isAdmin: profile?.isAdmin ?? false,
   };
 }
@@ -88,9 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const nextUser =
           session?.access_token &&
-          sessionUser &&
-          (sessionUser.email || sessionUser.phone) &&
-          (sessionUser.email_confirmed_at || sessionUser.phone_confirmed_at)
+          sessionUser?.email && sessionUser.email_confirmed_at
           ? sessionUser
           : null;
       setSupUser(nextUser);
@@ -119,14 +115,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithProvider = useCallback(async (provider: "google" | "apple") => {
     await authService.signInWithProvider(provider);
-  }, []);
-
-  const sendPhoneOtp = useCallback(async (phone: string) => {
-    await authService.sendPhoneOtp(phone);
-  }, []);
-
-  const verifyPhoneOtp = useCallback(async (phone: string, token: string) => {
-    await authService.verifyPhoneOtp(phone, token);
   }, []);
 
   const signUp = useCallback(async (name: string, email: string, password: string) => {
@@ -188,8 +176,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       configured: isSupabaseConfigured,
       signIn,
       signInWithProvider,
-      sendPhoneOtp,
-      verifyPhoneOtp,
       signUp,
       signOut,
       resetPassword,
@@ -204,8 +190,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       signIn,
       signInWithProvider,
-      sendPhoneOtp,
-      verifyPhoneOtp,
       signUp,
       signOut,
       resetPassword,
