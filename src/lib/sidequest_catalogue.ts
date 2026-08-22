@@ -11,6 +11,7 @@ export interface CataloguePlace {
   latitude?: number;
   longitude?: number;
   timing?: { start?: string; end?: string; confidence?: string };
+  distanceKm?: number;
 }
 
 export interface CatalogueLocation {
@@ -21,6 +22,7 @@ export interface CatalogueLocation {
   places: CataloguePlace[];
   hydrated?: boolean;
   source?: "seed" | "wikidata";
+  connectedDestinations?: string[];
 }
 
 export interface StaticCatalogueDestination {
@@ -31,6 +33,10 @@ export interface StaticCatalogueDestination {
   longitude?: number;
   spotIds?: string[];
   spotIdsByDistance?: Record<string, string[]>;
+  nearbyDestinationIds?: string[];
+  routeClusters?: string[][];
+  spotDistancesKm?: Record<string, number>;
+  spotDistanceTier?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -45,6 +51,8 @@ export interface StaticCatalogueSpot {
   longitude?: number;
   preferredStartTime?: string;
   preferredEndTime?: string;
+  timing?: { start?: string; end?: string; confidence?: string };
+  distanceKm?: number;
   [key: string]: unknown;
 }
 
@@ -92,6 +100,10 @@ function loadSpotDatabase() {
   return spotsPromise;
 }
 
+const CONNECTED_SPOT_IDS: Record<string, string[]> = {
+  "nandi hills": ["sq-0001", "sq-0002", "sq-0003", "sq-0004", "sq-0005", "sq-0030"],
+};
+
 function placeType(value: unknown): PlaceType {
   const known: PlaceType[] = [
     "culture", "nature", "shopping", "food", "viewpoint", "religious", "museum",
@@ -116,8 +128,14 @@ export async function loadStaticCatalogueLocation(
   if (!destination) return null;
   const spots = await loadSpotDatabase();
   const byId = new Map(spots.map((spot) => [String(spot.id ?? ""), spot]));
+  const destinationConnectedIds = Array.isArray(destination.nearbyDestinationIds)
+    ? destination.nearbyDestinationIds
+    : [];
   const ids = Array.isArray(destination.spotIds) ? destination.spotIds : [];
+  const connectedSpotIds = CONNECTED_SPOT_IDS[normalise(city)] ?? [];
+  const allIds = [...ids, ...connectedSpotIds];
   const places: CataloguePlace[] = ids
+    .concat(connectedSpotIds)
     .map((id) => byId.get(String(id)))
     .filter((spot): spot is StaticCatalogueSpot => Boolean(spot?.name || spot?.title))
     .slice(0, Math.max(1, limit))
@@ -129,6 +147,7 @@ export async function loadStaticCatalogueLocation(
       sourceUrl: String(spot.sourceUrl ?? ""),
       latitude: Number(spot.latitude),
       longitude: Number(spot.longitude),
+      distanceKm: typeof spot.distanceKm === "number" ? spot.distanceKm : undefined,
       timing: spot.timing && typeof spot.timing === "object"
         ? {
             start: typeof (spot.timing as { start?: unknown }).start === "string"
@@ -151,5 +170,8 @@ export async function loadStaticCatalogueLocation(
     places,
     hydrated: true,
     source: "wikidata",
+    connectedDestinations: destinationConnectedIds.length
+      ? destinationConnectedIds
+      : allIds.length > ids.length ? ["Adiyogi Shiva Statue, Isha Yoga Center"] : [],
   };
 }
