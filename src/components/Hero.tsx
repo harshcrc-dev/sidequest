@@ -4,6 +4,7 @@ import { detectCurrentLocation } from "../services/locations";
 import { Img } from "./Img";
 import { Icon, type IconName } from "./Icon";
 import { TIME_OPTIONS } from "../lib/time";
+import type { Location } from "../types/location";
 
 const VIBES: { label: string; icon: IconName }[] = [
   { label: "Food", icon: "food" },
@@ -24,9 +25,10 @@ const MODES: { key: import("../types").PlannerMode; label: string; sub: string; 
 const PLACEHOLDER =
   "I've got Saturday free, \u20B92,000, and want to do something I've never done.";
 
-export function Hero({ onPlan }: { onPlan: (prompt: string, mode?: import("../types").PlannerMode, city?: string) => void }) {
+export function Hero({ onPlan }: { onPlan: (prompt: string, mode?: import("../types").PlannerMode, city?: string, location?: Location) => void }) {
   const [prompt, setPrompt] = useState("");
   const [city, setCity] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<Location>();
   const [locating, setLocating] = useState(false);
   const [vibes, setVibes] = useState<string[]>([]);
   const [mode, setMode] = useState<import("../types").PlannerMode>("city");
@@ -44,7 +46,10 @@ export function Hero({ onPlan }: { onPlan: (prompt: string, mode?: import("../ty
     setLocating(true);
     try {
       const here = await detectCurrentLocation();
-      if (here.city) setCity(here.city);
+      if (here.city) {
+        setCity(here.city);
+        setSelectedLocation(here);
+      }
     } catch {
       cityRef.current?.focus();
     } finally {
@@ -58,7 +63,7 @@ export function Hero({ onPlan }: { onPlan: (prompt: string, mode?: import("../ty
     parts.push(`${shownDays} days, start at ${startTime}, finish at ${endTime}`);
     // City is optional here: if it's empty, App opens the city prompt (which
     // also offers geolocation) rather than blocking with an error.
-    onPlan(parts.join(". "), mode, city.trim() || undefined);
+    onPlan(parts.join(". "), mode, city.trim() || undefined, selectedLocation);
   };
 
   const scrollToPlanner = () =>
@@ -124,7 +129,10 @@ export function Hero({ onPlan }: { onPlan: (prompt: string, mode?: import("../ty
                 className="fx-box__city"
                 placeholder="Which city? e.g. Lisbon, Tokyo, Mexico City"
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
+                onChange={(e) => {
+                  setCity(e.target.value);
+                  setSelectedLocation(undefined);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
