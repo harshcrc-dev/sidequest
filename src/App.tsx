@@ -20,6 +20,7 @@ import { useReveal } from "./hooks/useReveal";
 import { tripsService } from "./services/trips";
 import { searchLocations, recordSearch } from "./services/locations";
 import { setDisplayCurrency } from "./lib/format";
+import { loadStaticCatalogueLocation } from "./lib/sidequest_catalogue";
 import { recordPageView } from "./services/analytics";
 import type { Location } from "./types/location";
 import {
@@ -227,13 +228,17 @@ export default function App() {
     setDisplayCurrency(location.countryCode);
     setIntent(intentToUse);
 
-    const recommendations = generateRecommendations(intentToUse);
+    const plan = await generatePlanAI(intentToUse, prompt, request.signal).catch(() => null);
+    if (activeRequest.current !== request) return;
+
+    const staticCatalogue = plan?.stops?.length
+      ? null
+      : await loadStaticCatalogueLocation(location.city, location.country, 30).catch(() => null);
+    if (activeRequest.current !== request) return;
+    const recommendations = generateRecommendations(intentToUse, staticCatalogue ?? undefined);
     let primary = recommendations[0];
     let usedAI = false;
-    if (liveAI && intentToUse.location) {
-      const plan = await generatePlanAI(intentToUse, prompt, request.signal).catch(() => null);
-      if (activeRequest.current !== request) return;
-      if (plan?.stops?.length) {
+    if (plan?.stops?.length) {
         const aiItin = buildItineraryFromStops(plan.stops, intentToUse);
         if (aiItin.length >= 3) {
           if (intentToUse.mode === "nearby" && plan.destination?.city) {
@@ -257,7 +262,6 @@ export default function App() {
           };
           usedAI = true;
         }
-      }
     }
 
     await minDelay;
@@ -329,6 +333,14 @@ export default function App() {
         }
       }
       activeRequest.current = null;
+    }
+
+    if (!origin) {
+      const promptCity = parseIntent(prompt, mode).origin;
+      if (promptCity && !isVaguePlace(promptCity)) {
+        origin = promptCity;
+        explicitOrigin = true;
+      }
     }
 
     if (!origin) {
@@ -817,8 +829,7 @@ function Marketing() {
   );
 }
 
-// Fill in your contact email/link here later.
-const CONTACT: string = "";
+const CONTACT: string = "get.in.touch.sidequest@gmail.com";
 
 function Footer() {
   return (
@@ -828,12 +839,18 @@ function Footer() {
           <b>SIDEQUEST</b>
           <span>Make your free time an adventure.</span>
         </div>
+
+        <div className="footer__contact" aria-label="Support contact information">
+          <span className="footer__contact-label">Support</span>
+          <a className="footer__contact-email" href={`mailto:${CONTACT}`}>
+            {CONTACT}
+          </a>
+        </div>
+
         <div className="footer__cols">
           <a href="#explore">Explore</a>
           <a href="#explore">Plan</a>
-          <a href={CONTACT ? (CONTACT.includes("@") ? `mailto:${CONTACT}` : CONTACT) : "#contact"}>
-            Contact
-          </a>
+          <a href={`mailto:${CONTACT}`}>Contact</a>
         </div>
       </div>
     </footer>

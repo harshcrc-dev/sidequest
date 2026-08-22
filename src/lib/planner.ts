@@ -1,5 +1,5 @@
 import { IMG } from "./images";
-import { localizeAmount } from "./format";
+import type { CatalogueLocation } from "./sidequest_catalogue";
 import type {
   Destination,
   ItineraryItem,
@@ -92,10 +92,35 @@ function detectCity(text: string): string | undefined {
   // Lightweight hint extraction only. Real, global resolution happens via the
   // geocoder in src/services/locations.ts; there is no hardcoded whitelist that
   // limits which destinations Sidequest supports.
-  const match = text.match(
-    /\b(?:in|around|near|to|at)\s+([A-Z][a-zA-Z\u00C0-\u017F]+(?:\s+[A-Z][a-zA-Z\u00C0-\u017F]+)?)/,
-  );
-  return match?.[1]?.trim();
+  const patterns = [
+    /\b(?:in|around|near|to|at)\s+([A-Z][a-zA-Z\u00C0-\u017F]+(?:\s+[A-Z][a-zA-Z\u00C0-\u017F]+){0,3})/,
+    /\b(?:in|around|near|to|at)\s+([a-zA-Z\u00C0-\u017F]+(?:\s+[a-zA-Z\u00C0-\u017F]+){0,3})/,
+    /^(?:trip(?:\s+to)?|plan(?:\s+for)?|day\s+in|weekend\s+in)\s+([A-Za-z\u00C0-\u017F]+(?:\s+[A-Za-z\u00C0-\u017F]+){0,3})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      const city = match[1].trim();
+      if (city && !/^(?:me|my|here|nearby|somewhere)$/i.test(city)) return city;
+    }
+  }
+
+  // If the user just typed a place name on its own (for example "Lisbon" or "Tokyo"),
+  // treat it as the city instead of asking for location again.
+  const standalone = text
+    .replace(/[^A-Za-z\u00C0-\u017F\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(" ");
+
+  if (standalone && !/\b(?:trip|plan|day|weekend|saturday|sunday|week|today|tonight|morning|afternoon|evening|start|finish|budget|budgeted|with|for|and|or)\b/i.test(standalone)) {
+    return standalone;
+  }
+
+  return undefined;
 }
 
 function detectInterests(text: string): string[] {
@@ -204,62 +229,26 @@ const SAMPLE_PLACES: SeedPlace[] = [
   { title: "Rooftop drinks", place: "Skyye, UB City", type: "nightlife", description: "City lights and a slow last drink.", cost: 1200, minutes: 75, interests: ["nightlife", "romantic"], slot: 6, image: IMG.rooftop, lat: 12.9719, lng: 77.5967 },
 ];
 
-// Generic, city-agnostic day templates. When the AI backend is offline we still
-// need a plausible plan for WHATEVER city the user resolved to (not Bangalore).
-// These stops are named for the resolved city and pinned around its real centre,
-// so a Lisbon request never renders Bangalore places. Costs are rough offline
-// estimates in the destination's local currency; live AI plans replace them.
-const CITY_TEMPLATES: Omit<SeedPlace, "place" | "image" | "lat" | "lng">[] = [
-  { title: "Slow breakfast", type: "food", description: "An unhurried local breakfast to ease into the day.", cost: 12, minutes: 60, interests: ["food", "coffee"], slot: 1 },
-  { title: "Bakery & coffee", type: "food", description: "Fresh pastries and a proper coffee to open the morning.", cost: 8, minutes: 45, interests: ["food", "coffee"], slot: 1 },
-  { title: "Morning walk", type: "nature", description: "A quiet loop through the old streets before the city wakes up.", cost: 0, minutes: 45, interests: ["nature", "relax"], slot: 1 },
-  { title: "Neighbourhood park", type: "nature", description: "Green space and morning air away from the traffic.", cost: 0, minutes: 45, interests: ["nature", "relax"], slot: 2 },
-  { title: "Lakeside cycle", type: "activity", description: "Rent a bike and follow the water while it is still calm.", cost: 6, minutes: 60, interests: ["nature", "adventure"], slot: 2 },
-  { title: "Local landmark", type: "culture", description: "The place everyone tells you to see, minus the crowds if you go early.", cost: 0, minutes: 40, interests: ["culture", "relax"], slot: 2 },
-  { title: "Market wander", type: "shopping", description: "Colour, produce and everyday life at the central market.", cost: 5, minutes: 60, interests: ["shopping", "culture"], slot: 2 },
-  { title: "Local lunch", type: "food", description: "A standout, well-loved spot for the city's signature dish.", cost: 15, minutes: 75, interests: ["food"], slot: 3 },
-  { title: "Street food crawl", type: "food", description: "Graze your way down the liveliest food street in town.", cost: 10, minutes: 60, interests: ["food", "adventure"], slot: 3 },
-  { title: "Gallery or museum", type: "culture", description: "A calm cultural counterpoint to the morning's noise.", cost: 8, minutes: 90, interests: ["culture", "relax"], slot: 4 },
-  { title: "Hands-on workshop", type: "activity", description: "A local craft session, something you probably haven't tried.", cost: 20, minutes: 90, interests: ["adventure", "culture"], slot: 4 },
-  { title: "Coffee reset", type: "food", description: "A specialty coffee bar and a quiet corner to slow down.", cost: 6, minutes: 45, interests: ["coffee", "relax"], slot: 4 },
-  { title: "Golden hour sunset", type: "nature", description: "A viewpoint over the city as the light softens.", cost: 0, minutes: 45, interests: ["nature", "romantic"], slot: 5 },
-  { title: "Dinner", type: "food", description: "A memorable, unhurried dinner to close the day.", cost: 25, minutes: 90, interests: ["food", "nightlife"], slot: 6 },
-  { title: "Evening drinks", type: "nightlife", description: "A lively bar with a room made for hanging around.", cost: 18, minutes: 90, interests: ["nightlife", "food"], slot: 6 },
-  { title: "Live music", type: "nightlife", description: "An intimate venue with a genuinely good local line-up.", cost: 15, minutes: 90, interests: ["nightlife", "adventure"], slot: 6 },
-];
-
-function placeLabel(title: string, city: string): string {
-  const t = title.toLowerCase();
-  if (t.includes("breakfast")) return `A local breakfast spot in ${city}`;
-  if (t.includes("bakery")) return `A neighbourhood cafe in ${city}`;
-  if (t.includes("morning walk")) return `${city}'s old quarter`;
-  if (t.includes("park")) return `A park near ${city}'s centre`;
-  if (t.includes("cycle")) return `A lakeside near ${city}`;
-  if (t.includes("landmark")) return `${city}'s best-known landmark`;
-  if (t.includes("market")) return `${city}'s central market`;
-  if (t.includes("lunch")) return `A well-loved lunch spot in ${city}`;
-  if (t.includes("street food")) return `${city}'s liveliest food street`;
-  if (t.includes("gallery")) return `A museum or gallery in ${city}`;
-  if (t.includes("workshop")) return `A local craft studio in ${city}`;
-  if (t.includes("coffee")) return `A specialty coffee bar in ${city}`;
-  if (t.includes("sunset")) return `A sunset viewpoint over ${city}`;
-  if (t.includes("dinner")) return `A memorable dinner spot in ${city}`;
-  if (t.includes("drinks")) return `A lively bar in ${city}`;
-  if (t.includes("music")) return `A live-music venue in ${city}`;
-  return `${title} in ${city}`;
-}
-
-function genericSeedsForCity(city: string, center: [number, number]): SeedPlace[] {
-  return CITY_TEMPLATES.map((tpl, i) => {
-    const [lat, lng] = spreadAround(center, i);
-    const place = placeLabel(tpl.title, city);
+function catalogueSeedsForCity(entry: CatalogueLocation): SeedPlace[] {
+  const latitude = entry.latitude;
+  const longitude = entry.longitude;
+  const center: [number, number] =
+    latitude !== null && longitude !== null ? [latitude, longitude] : CITY_CENTER;
+  return entry.places.map((place, index) => {
+    const type = place.type;
+    const [lat, lng] = spreadAround(center, index + 1);
     return {
-      ...tpl,
-      cost: localizeAmount(tpl.cost),
-      place,
-      image: imageForStop(tpl.type, `${tpl.title} ${place}`),
-      lat,
-      lng,
+      title: type === "food" ? "Local food stop" : type === "nature" ? "Outdoor stop" : "Landmark stop",
+      place: place.name,
+      type: type as ItineraryItem["type"],
+      description: place.description,
+      cost: type === "food" ? 700 : type === "shopping" ? 300 : 0,
+      minutes: type === "culture" ? 75 : 60,
+      interests: type === "food" ? ["food"] : type === "nature" ? ["nature", "relax"] : ["culture"],
+      slot: index + 1,
+      image: place.image || IMG.placeFallback,
+      lat: place.latitude ?? lat,
+      lng: place.longitude ?? lng,
     };
   });
 }
@@ -267,14 +256,11 @@ function genericSeedsForCity(city: string, center: [number, number]): SeedPlace[
 // Choose the seed set for the offline planner. If we resolved a real, non
 // Bangalore destination we template stops for THAT city; otherwise we fall back
 // to the curated Bangalore sample (used in local dev without an AI key).
-function seedsFor(intent: TripIntent): SeedPlace[] {
+function seedsFor(intent: TripIntent, catalogue?: CatalogueLocation): SeedPlace[] {
   const loc = intent.location;
   const city = (loc?.city ?? intent.origin ?? "").trim();
-  const isBangalore = /bangalore|bengaluru/i.test(city);
-  if (loc && !isBangalore) {
-    return genericSeedsForCity(city || "this city", [loc.latitude, loc.longitude]);
-  }
-  return SAMPLE_PLACES;
+  if (catalogue) return catalogueSeedsForCity(catalogue);
+  return city ? [] : SAMPLE_PLACES;
 }
 
 
@@ -324,19 +310,48 @@ function parseClock(value?: string): number | undefined {
   return h * 60 + min;
 }
 
+function resolvePlanWindow(intent: TripIntent): { startHour: number; endHour: number } {
+  const startMinute = parseClock(intent.startTime);
+  const endMinute = parseClock(intent.endTime);
+  const isDatePlan =
+    intent.party === "couple" ||
+    intent.interests.includes("romantic") ||
+    /date|romantic|evening|night out/.test(intent.raw.toLowerCase());
+
+  const startHour =
+    startMinute !== undefined
+      ? Math.floor(startMinute / 60)
+      : isDatePlan
+        ? 18
+        : intent.durationHours && intent.durationHours <= 6
+          ? 17
+          : 10;
+
+  const endHour =
+    endMinute !== undefined
+      ? Math.floor(endMinute / 60)
+      : isDatePlan
+        ? 23
+        : startHour + Math.max(8, Math.round(intent.durationHours ?? 8));
+
+  return { startHour, endHour };
+}
+
 function buildItinerary(
   places: SeedPlace[],
   startHour: number,
   budget?: number,
   times?: (string | undefined)[],
+  endHour?: number,
 ): ItineraryItem[] {
   const items: ItineraryItem[] = [];
+  const windowEnd = endHour !== undefined ? endHour * 60 : undefined;
   let cursor = startHour * 60;
   places.forEach((p, index) => {
-    // Honour the model's own time when it doesn't run the day backwards.
     const wanted = parseClock(times?.[index]);
     const startAbs = wanted !== undefined && wanted >= cursor ? wanted : cursor;
     const endAbs = startAbs + p.minutes;
+    if (windowEnd !== undefined && endAbs > windowEnd) return;
     const next = places[index + 1];
     const route = next ? travelBetween([p.lat, p.lng], [next.lat, next.lng]) : undefined;
     items.push({
@@ -377,13 +392,14 @@ function buildFallbackItinerary(
   budget?: number,
 ): ItineraryItem[] {
   const days = Math.max(1, intent.durationDays ?? 1);
-  if (days === 1) return buildItinerary(places, startHour, budget);
+  const { endHour } = resolvePlanWindow(intent);
+  if (days === 1) return buildItinerary(places, startHour, budget, undefined, endHour);
 
   const dailyBudget = budget ? budget / days : undefined;
   return Array.from({ length: days }, (_, dayIndex) => {
     const shift = (dayIndex * Math.max(1, Math.floor(places.length / 2))) % places.length;
     const dayPlaces = places.slice(shift).concat(places.slice(0, shift));
-    return buildItinerary(dayPlaces, startHour, dailyBudget).map((item) => ({
+    return buildItinerary(dayPlaces, startHour, dailyBudget, undefined, endHour).map((item) => ({
       ...item,
       id: `day-${dayIndex + 1}-${item.id}`,
       day: dayIndex + 1,
@@ -482,11 +498,13 @@ export interface AIStop {
 // Fallback map centre used only by the offline sample plan (see SAMPLE_PLACES).
 const CITY_CENTER: [number, number] = [12.9716, 77.5946];
 
-// Deterministic spread around a destination centre so pins never stack when an
-// AI stop has no coordinate of its own. Works for any city worldwide.
+// Keep fallback pins close to the destination centre so they stay on usable land
+// instead of drifting into coastal or water-heavy areas when the AI response has
+// no coordinate of its own. The wider radius is only for local dev / offline
+// fallback and should be tight enough to stay in-city.
 function spreadAround(center: [number, number], index: number): [number, number] {
   const angle = ((index * 137.5) * Math.PI) / 180;
-  const r = 0.02 + (index % 5) * 0.006;
+  const r = 0.003 + (index % 5) * 0.0014;
   return [center[0] + Math.sin(angle) * r, center[1] + Math.cos(angle) * r];
 }
 
@@ -508,6 +526,7 @@ function normalizeType(raw: string): ItineraryItem["type"] {
 
 function imageForStop(type: ItineraryItem["type"], text: string): string {
   const t = text.toLowerCase();
+  if (/date|romantic|couple|sunset|city lights|rooftop|wine|cocktail|drinks/.test(t)) return IMG.dateQuest;
   if (/breakfast|brunch|idli|dosa/.test(t)) return IMG.breakfast;
   if (/bakery|pastry|croissant/.test(t)) return IMG.bakery;
   if (/coffee|cafe|caf\u00e9|espresso/.test(t)) return IMG.coffee;
@@ -519,8 +538,6 @@ function imageForStop(type: ItineraryItem["type"], text: string): string {
   if (/pottery|workshop|craft/.test(t)) return IMG.pottery;
   if (/cycle|cycling|bike/.test(t)) return IMG.cycling;
   if (/lake|tank/.test(t)) return IMG.lake;
-  // Require a real park/garden signal so a district like "Covent Garden" isn't
-  // mistaken for a park.
   if (/\bpark\b|botanical|\bgardens\b|nature walk|riverside walk/.test(t)) return IMG.park;
   if (/market|bazaar|shopping|mall/.test(t)) return IMG.market;
   if (/sunset|sundown/.test(t)) return IMG.sunset;
@@ -532,9 +549,10 @@ function imageForStop(type: ItineraryItem["type"], text: string): string {
     case "nature": return IMG.park;
     case "shopping": return IMG.market;
     case "rest": return IMG.coffee;
-    default: return IMG.cycling;
+    default: return IMG.placeFallback;
   }
 }
+
 
 // Turn the model's authored stops into a real itinerary: times and routes are
 // computed here. Each stop uses its own coordinate from the AI plan, falling
@@ -545,7 +563,7 @@ function isFiniteCoord(n: number | undefined): n is number {
 }
 
 export function buildItineraryFromStops(stops: AIStop[], intent: TripIntent): ItineraryItem[] {
-  const startHour = intent.durationHours && intent.durationHours <= 6 ? 17 : 10;
+  const { startHour, endHour } = resolvePlanWindow(intent);
   const center: [number, number] = intent.location
     ? [intent.location.latitude, intent.location.longitude]
     : CITY_CENTER;
@@ -578,17 +596,17 @@ export function buildItineraryFromStops(stops: AIStop[], intent: TripIntent): It
           lng,
         };
       });
-      return buildItinerary(seeds, startHour, undefined, dayStops.map((stop) => stop.time)).map(
+      return buildItinerary(seeds, startHour, undefined, dayStops.map((stop) => stop.time), endHour).map(
         (item) => ({ ...item, id: `day-${day}-${item.id}`, day }),
       );
     });
 }
 
 
-export function generateRecommendations(intent: TripIntent): Recommendation[] {
+export function generateRecommendations(intent: TripIntent, catalogue?: CatalogueLocation): Recommendation[] {
   const startHour = intent.durationHours && intent.durationHours <= 6 ? 17 : 10;
   const itemCount = intent.pace === "slow" ? 3 : intent.pace === "packed" ? 5 : 4;
-  const seeds = seedsFor(intent);
+  const seeds = seedsFor(intent, catalogue);
 
   const primaryPlaces = pickByInterest(seeds, intent.interests, itemCount);
   const primaryItin = buildFallbackItinerary(primaryPlaces, intent, startHour, intent.budget);

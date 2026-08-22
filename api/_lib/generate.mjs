@@ -65,6 +65,7 @@ export function config() {
     supabaseUrl: process.env.SUPABASE_URL ?? "",
     supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
     ticketmasterApiKey: process.env.TICKETMASTER_API_KEY ?? "",
+    googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY ?? "",
     publicEventSources: (process.env.PUBLIC_EVENT_SOURCES ?? "")
       .split(",")
       .map((source) => source.trim())
@@ -240,17 +241,23 @@ async function fetchWeather(location) {
 
 async function fetchNearbyPois(location) {
   // One small, cached query. Public Overpass instances are not for bulk crawling.
-  const query = `[out:json][timeout:12];(
+  const query = `[out:json][timeout:20];(
     nwr(around:6000,${location.latitude},${location.longitude})[tourism=museum];
     nwr(around:6000,${location.latitude},${location.longitude})[tourism=gallery];
+    nwr(around:6000,${location.latitude},${location.longitude})[tourism=attraction];
+    nwr(around:6000,${location.latitude},${location.longitude})[tourism=viewpoint];
     nwr(around:6000,${location.latitude},${location.longitude})[leisure=park];
+    nwr(around:6000,${location.latitude},${location.longitude})[leisure=garden];
     nwr(around:6000,${location.latitude},${location.longitude})[amenity=arts_centre];
     nwr(around:6000,${location.latitude},${location.longitude})[amenity=marketplace];
-  );out center tags 30;`;
+    nwr(around:6000,${location.latitude},${location.longitude})[amenity=restaurant];
+    nwr(around:6000,${location.latitude},${location.longitude})[amenity=cafe];
+    nwr(around:6000,${location.latitude},${location.longitude})[amenity=theatre];
+  );out center tags 300;`;
   try {
     const response = await fetch("https://overpass-api.de/api/interpreter", {
       method: "POST",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(15_000),
       headers: {
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         "User-Agent": "SidequestPlanner/1.0 (+https://sidequest.example)",
@@ -266,7 +273,35 @@ async function fetchNearbyPois(location) {
         kind: String(item.tags?.tourism ?? item.tags?.leisure ?? item.tags?.amenity ?? "place"),
       }))
       .filter((poi) => poi.name && !seen.has(poi.name.toLowerCase()) && seen.add(poi.name.toLowerCase()))
-      .slice(0, 16);
+      .slice(0, 300);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchGooglePlaces(location) {
+  const key = config().googlePlacesApiKey;
+  if (!key) return [];
+  const types = ["tourist_attraction", "museum", "restaurant", "cafe", "park", "shopping_mall"];
+  try {
+    const results = await Promise.all(types.map(async (type) => {
+      const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
+      url.searchParams.set("location", `${location.latitude},${location.longitude}`);
+      url.searchParams.set("radius", "6000");
+      url.searchParams.set("type", type);
+      url.searchParams.set("key", key);
+      const response = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data.results)
+        ? data.results.map((place) => ({ name: String(place.name ?? ""), kind: type }))
+        : [];
+    }));
+    const seen = new Set();
+    return results.flat().filter((place) => {
+      const keyName = place.name.toLowerCase();
+      return place.name && !seen.has(keyName) && seen.add(keyName);
+    }).slice(0, 150);
   } catch {
     return [];
   }
@@ -279,7 +314,16 @@ export async function getTravelContext(location) {
   const key = `${location.latitude.toFixed(2)},${location.longitude.toFixed(2)}`;
   const cached = travelContextCache.get(key);
   if (cached?.expiresAt > Date.now()) return cached.value;
-  const [weather, places] = await Promise.all([fetchWeather(location), fetchNearbyPois(location)]);
+  const [weather, osmPlaces, googlePlaces] = await Promise.all([
+    fetchWeather(location),
+    fetchNearbyPois(location),
+    fetchGooglePlaces(location),
+  ]);
+  const seen = new Set();
+  const places = [...osmPlaces, ...googlePlaces].filter((place) => {
+    const name = place.name.toLowerCase();
+    return !seen.has(name) && seen.add(name);
+  }).slice(0, 300);
   return cacheTravelContext(key, { weather, places });
 }
 
@@ -306,15 +350,22 @@ async function callChat(messages, { format = "json" } = {}) {
   let lastDetail = "";
   for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 700 * attempt));
-    const res = await fetch(`${c.baseUrl}/chat/completions`, {
-      method: "POST",
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${c.apiKey}`,
-      },
-      body,
-    });
+    let res;
+    try {
+      res = await fetch(`${c.baseUrl}/chat/completions`, {
+        method: "POST",
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${c.apiKey}`,
+        },
+        body,
+      });
+    } catch (error) {
+      lastDetail = error instanceof Error ? error.message : "network error";
+      if (attempt < 4) continue;
+      throw new Error(`AI request failed: ${lastDetail}`);
+    }
     if (res.ok) {
       const data = await res.json();
       return data?.choices?.[0]?.message?.content ?? null;
@@ -425,15 +476,16 @@ function validatePlan(plan) {
 const SYSTEM = `You are Sidequest's global day planner. You build realistic, personalised plans for ANY city or town on earth.
 The request's "userRequest" field contains the user's exact homepage message. Follow it closely and make its stated preferences, timing, budget, interests and constraints control the plan. Do not replace it with a generic itinerary.
 Use the destination's real neighbourhoods, landmarks, food and culture. Never assume a specific country unless the destination implies it.
-Return a geographically coherent plan: a sensible morning start, food at appropriate times, an afternoon activity and an evening finish.
+Return a geographically coherent plan: a sensible start for the actual requested window, a tight route with no filler, and a clear finish. Never schedule breakfast after 10:30 or at 17:00.
 Every activity needs real-world coordinates (latitude/longitude) near the destination, a short practical description, one allowed category, a realistic duration (15 to 240 minutes) and an estimated per-person cost.
 Every activity name MUST be the exact official name of a real venue, landmark, park or mapped route that can be searched on OpenStreetMap. Never invent descriptive business names such as "A Local Cafe" or "South Bank Coffee".
 EVENT RULE: If the request contains a non-empty "events" list, only use events from that verified list. Include the exact event name and venue, and do not invent events when the list is empty.
 LIVE CONTEXT RULE: The request can contain public weather and nearby mapped places. Use them as evidence: avoid outdoor-heavy plans in high rain probability or severe conditions, and prefer named places from nearbyPlaces when they fit. Do not invent weather, places, or events beyond the supplied context. Sparse nearbyPlaces means the destination may be a small town: make a shorter, stronger plan rather than padding it with uncertain stops.
 MODE RULES (critical): The request has a "mode" field. Always honor durationDays and durationHours. For "city", create a local plan; when durationDays is greater than one, create distinct consecutive local days rather than repeating one day. For "nearby", the supplied location is the ORIGIN, not the destination. Select one specific real destination 30 to 120 km outside that origin. Set response.location to that destination, name it in the title, and include realistic outward and return travel as activities. Build the rest of the itinerary at that destination only; for multiple days, include an overnight stay and distinct days. Never return an origin-city plan or vague suggestions. For "long_trip" with durationDays=1, create a one-day destination getaway with realistic outward and return travel. For "long_trip" longer than one day, create a genuine consecutive multi-day trip: include arrival and return logistics, an accommodation-area recommendation in tips, distinct activities on every day, and respect durationHours as the user's active touring hours per day.
-SCHEDULE RULE: When the request contains startTime and endTime, every relevant itinerary day must start at or after startTime and finish by endTime. Never schedule activities outside that chosen clock window.
+DATE PLAN RULE: If the request is clearly a date, romantic night, couple outing, or includes words like date, romantic, couple, sunset, evening, drinks, wine, dinner, city lights, then create an evening-focused plan with a late-afternoon start (typically 17:00-18:00), no breakfast, no midday brunch filler, and 3-5 tight, coherent activities that fit the evening window. Make the flow feel like a real date: a walk, one strong food stop, one atmosphere stop, and a natural finish.
+SCHEDULE RULE: When the request contains startTime and endTime, every relevant itinerary day must start at or after startTime and finish by endTime. Never schedule activities outside that chosen clock window. If an evening date is requested and the schedule window is 17:00-23:00, do not schedule breakfast or lunch anywhere in that plan.
 MONEY RULES (critical): All amounts (each activity's estimatedCost and the plan's estimatedBudget) MUST be realistic integer amounts in the currency given by the request's "currency" field (an ISO 4217 code such as INR, EUR, USD, JPY, GBP). Use typical real-world local prices for that destination and currency, and never convert to another currency. estimatedCost is the realistic per-person spend at that stop today (a full sit-down meal, the real ticket/entry price, drinks, a workshop fee, etc.), not a minimum. Do not lowball: a proper lunch or dinner at a named restaurant, a museum ticket, a guided activity or a bar round should each cost what a real visitor would actually pay. Paid services (restaurants, cafes, museums, galleries, tickets, workshops, bars, clubs, shopping, paid transport) MUST have a realistic non-zero cost; only genuinely free things (public parks, walking a street, a viewpoint, free-entry museums, window shopping) may be 0. estimatedBudget MUST equal the exact sum of every activity's estimatedCost.
-TIME RULES (critical): Every activity's "time" MUST be a 24-hour "HH:MM" clock time. Times MUST run in strict chronological order through the day and never overlap: each activity starts after the previous one's start plus its durationMinutes plus realistic travel time between their coordinates. Schedule things at sensible real-world hours: breakfast around 08:00-09:30, lunch around 12:00-14:00, dinner around 19:00-21:00, nightlife after 21:00, and cultural sites during normal opening hours.
+TIME RULES (critical): Every activity's "time" MUST be a 24-hour "HH:MM" clock time. Times MUST run in strict chronological order through the day and never overlap: each activity starts after the previous one's start plus its durationMinutes plus realistic travel time between their coordinates. Schedule things at sensible real-world hours: breakfast around 08:00-09:30, lunch around 12:00-14:00, dinner around 19:00-21:00, nightlife after 21:00, and cultural sites during normal opening hours. For date plans, use 17:00-23:00 with walk, dinner, drinks or sunset finish rather than breakfast or midday filler.
 Do not invent fake businesses, events or opening hours. Keep copy concise and do not use an em dash.
 
 Respond with ONLY a JSON object (no markdown, no prose) with EXACTLY this shape:
@@ -462,7 +514,7 @@ Respond with ONLY a JSON object (no markdown, no prose) with EXACTLY this shape:
   "estimatedBudget": number,
   "tips": string[]
 }
-ACTIVITY COUNT RULES: Quality and feasibility matter more than quantity. Respect the request's "durationHours" and available nearbyPlaces. Use 2 to 3 activities for up to 3 hours, 3 to 4 for up to 6 hours, and 3 to 5 for a full day. When nearbyPlaces is sparse or the destination is a small town, use only 2 to 4 strong stops for the day. For a "long_trip", use 2 to 4 meaningful activities per day so there is room for arrival, meals, accommodation and realistic transfers. Never add a weak, duplicate, distant or uncertain stop merely to reach a count. Latitude/longitude must be real and close to the destination.`;
+ACTIVITY COUNT RULES: Quality and feasibility matter more than quantity. Respect the request's "durationHours" and available nearbyPlaces. Use 2 to 3 activities for up to 3 hours, 3 to 4 for up to 6 hours, and 3 to 5 for a full day. For date plans, aim for 3-4 strong, close-by activities in a single tight arc, not an all-day breakfast-to-dinner spread. When nearbyPlaces is sparse or the destination is a small town, use only 2 to 4 strong stops for the day. For a "long_trip", use 2 to 4 meaningful activities per day so there is room for arrival, meals, accommodation and realistic transfers. Never add a weak, duplicate, distant or uncertain stop merely to reach a count. Latitude/longitude must be real and close to the destination.`;
 
 function distanceKm(from, to) {
   const radians = (degrees) => (degrees * Math.PI) / 180;
@@ -521,6 +573,23 @@ function planMatchesSchedule(plan, startTime, endTime) {
     if (firstStart === null || lastStart === null) return false;
     const lastEnd = lastStart + last.durationMinutes;
     return firstStart >= start && lastEnd <= end;
+  });
+}
+
+function planMatchesActivityQuality(plan, userRequest = "") {
+  const isDate = /\b(date|romantic|couple|evening|night out)\b/i.test(userRequest);
+  return plan.days.every((day) => {
+    let previousStart = -1;
+    return day.activities.every((activity) => {
+      const start = clockMinutes(activity.time);
+      if (start === null || start <= previousStart) return false;
+      previousStart = start;
+      const text = `${activity.name} ${activity.description}`.toLowerCase();
+      if (/breakfast|brunch/.test(text) && start > 10 * 60 + 30) return false;
+      if (/\blunch\b/.test(text) && (start < 11 * 60 || start > 15 * 60)) return false;
+      if (isDate && /breakfast|brunch|\blunch\b/.test(text)) return false;
+      return true;
+    });
   });
 }
 
@@ -746,6 +815,7 @@ export async function generateSidequestPlan(body) {
         plan &&
         planMatchesDestination(plan, body.location, context.mode) &&
         planMatchesSchedule(plan, context.startTime, context.endTime) &&
+        planMatchesActivityQuality(plan, context.userRequest) &&
         planMatchesRequestedDuration(plan, context.durationDays, context.durationHours)
       ) {
         const geocoded = await geocodePlan(plan, body.location);

@@ -3,6 +3,7 @@ import { Img } from "./Img";
 import { IMG } from "../lib/images";
 
 const imageRequests = new Map<string, Promise<string | null>>();
+const descriptionRequests = new Map<string, Promise<string | null>>();
 
 // Tracks which place has claimed a given resolved photo, so two different stops
 // (e.g. a temple and the street beside it that share a Wikipedia article) don't
@@ -88,6 +89,33 @@ function getPlaceImage(place: string, context?: string): Promise<string | null> 
     })
     .catch(() => null);
   imageRequests.set(key, request);
+  return request;
+}
+
+export function getPlaceDescription(place: string, context?: string): Promise<string | null> {
+  const name = cleanPlaceName(place);
+  if (GENERIC_PLACE.test(name)) return Promise.resolve(null);
+  const key = `${name}|${context ?? ""}`.toLowerCase();
+  const cached = descriptionRequests.get(key);
+  if (cached) return cached;
+  const search = context ? `${name} ${context}` : name;
+  const url =
+    "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*" +
+    `&generator=search&gsrsearch=${encodeURIComponent(search)}&gsrlimit=1` +
+    "&prop=extracts&exintro=1&explaintext=1&exchars=280";
+  const request = fetch(url)
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const data = await response.json();
+      const pages = data?.query?.pages as
+        | Record<string, { title?: string; extract?: string }>
+        | undefined;
+      const first = pages ? Object.values(pages)[0] : undefined;
+      const extract = first?.extract?.trim();
+      return first?.title && extract && relevantArticle(first.title, name) ? extract : null;
+    })
+    .catch(() => null);
+  descriptionRequests.set(key, request);
   return request;
 }
 

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ItineraryItem } from "../types";
 import { Icon, type IconName } from "./Icon";
 import { MiniMap } from "./MiniMap";
-import { PlaceImage } from "./PlaceImage";
+import { getPlaceDescription, PlaceImage } from "./PlaceImage";
 import { money } from "../lib/format";
 
 const TYPE_LABEL: Record<ItineraryItem["type"], string> = {
@@ -33,6 +33,21 @@ function routeIcon(mode: string): IconName {
 
 function routeLabel(mode: string) {
   return mode === "walk" ? "walk" : mode === "drive" ? "drive" : mode === "transit" ? "transit" : "ride";
+}
+
+function PlaceDescription({ place, fallback, context }: { place: string; fallback: string; context?: string }) {
+  const [description, setDescription] = useState(fallback);
+  useEffect(() => {
+    let active = true;
+    setDescription(fallback);
+    void getPlaceDescription(place, context).then((summary) => {
+      if (active && summary) setDescription(summary);
+    });
+    return () => {
+      active = false;
+    };
+  }, [place, fallback, context]);
+  return <div className="tl-card__desc">{description}</div>;
 }
 
 export function Itinerary({
@@ -115,7 +130,7 @@ export function Itinerary({
                       <Icon name="pin" size={13} />
                       {item.place}
                     </div>
-                    <div className="tl-card__desc">{item.description}</div>
+                    <PlaceDescription place={item.place} fallback={item.description} context={context} />
                     <button
                       className="tl-swap"
                       onClick={() => onSwap(item.id)}
