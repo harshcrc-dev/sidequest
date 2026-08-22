@@ -203,6 +203,8 @@ interface SeedPlace {
   image: string;
   lat: number;
   lng: number;
+  preferredStart?: number;
+  preferredEnd?: number;
 }
 
 const SAMPLE_PLACES: SeedPlace[] = [
@@ -249,6 +251,8 @@ function catalogueSeedsForCity(entry: CatalogueLocation): SeedPlace[] {
       image: place.image || IMG.placeFallback,
       lat: place.latitude ?? lat,
       lng: place.longitude ?? lng,
+      preferredStart: parseClock(place.timing?.start),
+      preferredEnd: parseClock(place.timing?.end),
     };
   });
 }
@@ -259,7 +263,19 @@ function catalogueSeedsForCity(entry: CatalogueLocation): SeedPlace[] {
 function seedsFor(intent: TripIntent, catalogue?: CatalogueLocation): SeedPlace[] {
   const loc = intent.location;
   const city = (loc?.city ?? intent.origin ?? "").trim();
-  if (catalogue) return catalogueSeedsForCity(catalogue);
+  if (catalogue) {
+    const allPlaces = catalogueSeedsForCity(catalogue);
+    const { startHour, endHour } = resolvePlanWindow(intent);
+    const windowStart = startHour * 60;
+    const windowEnd = endHour * 60;
+    const compatible = allPlaces.filter((place) => {
+      if (place.preferredStart === undefined && place.preferredEnd === undefined) return true;
+      const preferredStart = place.preferredStart ?? 0;
+      const preferredEnd = place.preferredEnd ?? 24 * 60;
+      return preferredStart < windowEnd && preferredEnd > windowStart;
+    });
+    return compatible.length >= 3 ? compatible : allPlaces;
+  }
   return city ? [] : SAMPLE_PLACES;
 }
 
@@ -349,7 +365,10 @@ function buildItinerary(
   let cursor = startHour * 60;
   places.forEach((p, index) => {
     const wanted = parseClock(times?.[index]);
-    const startAbs = wanted !== undefined && wanted >= cursor ? wanted : cursor;
+    const preferredStart = p.preferredStart !== undefined ? p.preferredStart : cursor;
+    const preferredEnd = p.preferredEnd;
+    const startAbs = Math.max(cursor, wanted ?? preferredStart);
+    if (preferredEnd !== undefined && startAbs + p.minutes > preferredEnd) return;
     const endAbs = startAbs + p.minutes;
     if (windowEnd !== undefined && endAbs > windowEnd) return;
     const next = places[index + 1];

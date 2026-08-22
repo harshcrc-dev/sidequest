@@ -10,6 +10,7 @@ export interface CataloguePlace {
   sourceUrl: string;
   latitude?: number;
   longitude?: number;
+  timing?: { start?: string; end?: string; confidence?: string };
 }
 
 export interface CatalogueLocation {
@@ -128,6 +129,19 @@ export async function loadStaticCatalogueLocation(
       sourceUrl: String(spot.sourceUrl ?? ""),
       latitude: Number(spot.latitude),
       longitude: Number(spot.longitude),
+      timing: spot.timing && typeof spot.timing === "object"
+        ? {
+            start: typeof (spot.timing as { start?: unknown }).start === "string"
+              ? (spot.timing as { start: string }).start
+              : undefined,
+            end: typeof (spot.timing as { end?: unknown }).end === "string"
+              ? (spot.timing as { end: string }).end
+              : undefined,
+            confidence: typeof (spot.timing as { confidence?: unknown }).confidence === "string"
+              ? (spot.timing as { confidence: string }).confidence
+              : undefined,
+          }
+        : undefined,
     }));
   return {
     city,
