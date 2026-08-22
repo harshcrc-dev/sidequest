@@ -164,7 +164,7 @@ export function RefinementBar({
           onKeyDown={(e) => e.key === "Enter" && send()}
           disabled={busy}
         />
-        <button className="btn btn--accent" onClick={send} disabled={busy}>
+        <button className="btn btn--accent" onClick={send} disabled={busy} title="Send plan update">
           {busy ? "Updating..." : "Update plan"}
         </button>
       </div>
