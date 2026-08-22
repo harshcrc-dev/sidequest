@@ -71,11 +71,13 @@ export function Profile() {
   }, [profile]);
 
   useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
     let active = true;
     setLoadingActivity(true);
     void Promise.all([
-      tripsService.list(user.id).catch(() => [] as SavedTrip[]),
-      listSearchHistory(user.id, 8).catch(() => [] as SearchRow[]),
+      tripsService.list(userId).catch(() => [] as SavedTrip[]),
+      listSearchHistory(userId, 8).catch(() => [] as SearchRow[]),
     ]).then(([savedTrips, searches]) => {
       if (!active) return;
       setTrips(savedTrips);
@@ -83,7 +85,7 @@ export function Profile() {
       setLoadingActivity(false);
     });
     return () => { active = false; };
-  }, [user.id]);
+  }, [user]);
 
   const label = useMemo(
     () => (home ? `${home.city}${home.country ? `, ${home.country}` : ""}` : ""),
