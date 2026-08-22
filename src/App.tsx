@@ -426,7 +426,7 @@ export default function App() {
     settingsOverride?: Partial<Pick<TripIntent, "budget" | "durationHours" | "durationDays" | "startTime" | "endTime">>,
     fallback?: () => void,
   ) => {
-    if (!intent?.location || !aiAvailable) {
+    if (!intent?.location) {
       if (settingsOverride && intent) setIntent({ ...intent, ...settingsOverride });
       if (fallback) fallback();
       else setItems((previous) => refineItinerary(previous, fallbackAction));
