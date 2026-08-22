@@ -305,17 +305,19 @@ export default function App() {
     const typedCity = city?.trim();
     const homeCity = profile?.preferences.home?.city ?? profile?.homeCity ?? undefined;
     // A typed city (or a picked result) is an explicit choice the AI must not override.
-    let explicitOrigin = Boolean(preresolved?.city || (typedCity && !isVaguePlace(typedCity)));
+    const selectedOrigin =
+      preresolved?.city || (typedCity && !isVaguePlace(typedCity) ? typedCity : undefined);
+    let explicitOrigin = Boolean(selectedOrigin);
     const namedOrigin = parsed.origin && !isVaguePlace(parsed.origin) ? parsed.origin : undefined;
+    const nearbyOrigin = selectedOrigin || namedOrigin;
     let origin =
-      preresolved?.city ||
-      (typedCity && !isVaguePlace(typedCity) ? typedCity : undefined) ||
+      selectedOrigin ||
       namedOrigin ||
       homeCity;
 
     // A nearby escape needs an origin to choose a real destination. Ask for
     // it before AI intent parsing so location access has a deterministic fallback.
-    if (parsed.mode === "nearby" && !origin) {
+    if (parsed.mode === "nearby" && !nearbyOrigin) {
       setCityAsk({ prompt, mode });
       return;
     }
