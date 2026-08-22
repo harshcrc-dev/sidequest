@@ -20,7 +20,7 @@ export function AuthModal({
   reason?: string;
 }) {
   const { signIn, signUp, resetPassword, signInWithProvider, configured } = useAuth();
-  const [mode, setMode] = useState<Mode>("register");
+  const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -208,7 +208,7 @@ export function AuthModal({
                 : mode === "register"
                   ? "Create account"
                   : mode === "login"
-                    ? "Sign in"
+                    ? "Log in"
                     : mode === "forgot"
                       ? "Send reset link"
                       : "Send reset link"}
@@ -218,7 +218,6 @@ export function AuthModal({
           {(mode === "login" || mode === "register") && (
             <div className="auth__providers">
               <button type="button" className="btn btn--ghost btn--full" onClick={() => void signInWithProvider("google")}>Continue with Google</button>
-              <button type="button" className="btn btn--ghost btn--full" onClick={() => void signInWithProvider("apple")}>Continue with Apple</button>
             </div>
           )}
 
@@ -238,7 +237,7 @@ export function AuthModal({
               <>
                 {mode === "forgot" ? "Remembered it? " : "New here? "}
                 <button onClick={() => setMode(mode === "forgot" ? "login" : "register")}>
-                  {mode === "forgot" ? "Back to sign in" : "Create one"}
+                  {mode === "forgot" ? "Back to log in" : "Sign up"}
                 </button>
               </>
             )}
