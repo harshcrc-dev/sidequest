@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { searchLocations } from "../services/locations";
+import { listSearchHistory } from "../services/locations";
+import { tripsService } from "../services/trips";
 import type { Location } from "../types/location";
-import type { Pace } from "../types";
+import type { Pace, SavedTrip } from "../types";
+import type { SearchRow } from "../types/database";
 
 const INTERESTS = [
   "Food", "Coffee", "Nature", "Culture", "Nightlife",
@@ -24,6 +27,9 @@ export function Profile() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [trips, setTrips] = useState<SavedTrip[]>([]);
+  const [history, setHistory] = useState<SearchRow[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
 
   const prefs = profile?.preferences ?? {};
   const [interests, setInterests] = useState<string[]>(prefs.interests ?? []);
@@ -56,7 +62,28 @@ export function Profile() {
     setStyle(p.travelStyle ?? "balanced");
     setDuration(p.tripDuration ?? "a full day");
     setHomeQuery(profile.homeCity ?? "");
+    setHome(profile.homeCity ? {
+      city: profile.homeCity,
+      country: profile.homeCountry ?? "",
+      latitude: profile.homeLat ?? 0,
+      longitude: profile.homeLng ?? 0,
+    } : null);
   }, [profile]);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingActivity(true);
+    void Promise.all([
+      tripsService.list(user.id).catch(() => [] as SavedTrip[]),
+      listSearchHistory(user.id, 8).catch(() => [] as SearchRow[]),
+    ]).then(([savedTrips, searches]) => {
+      if (!active) return;
+      setTrips(savedTrips);
+      setHistory(searches);
+      setLoadingActivity(false);
+    });
+    return () => { active = false; };
+  }, [user.id]);
 
   const label = useMemo(
     () => (home ? `${home.city}${home.country ? `, ${home.country}` : ""}` : ""),
@@ -132,6 +159,39 @@ export function Profile() {
           {user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : user.name.charAt(0).toUpperCase()}
         </div>
       </div>
+
+      <section className="profile__stats">
+        <div className="panel profile__stat"><b>{trips.length}</b><span>Saved sidequests</span></div>
+        <div className="panel profile__stat"><b>{history.length}</b><span>Recent searches</span></div>
+        <div className="panel profile__stat"><b>{trips.filter((trip) => trip.status === "completed").length}</b><span>Completed trips</span></div>
+      </section>
+
+      <section className="panel">
+        <h3>Your sidequests</h3>
+        <p className="panel__hint">Plans you saved for later, with their destination and timing.</p>
+        {loadingActivity ? <p className="panel__hint">Loading your activity…</p> : trips.length === 0 ? (
+          <p className="panel__hint">No saved sidequests yet. Save a plan and it will appear here.</p>
+        ) : (
+          <div className="profile__activity-list">
+            {trips.slice(0, 5).map((trip) => (
+              <div className="profile__activity" key={trip.id}>
+                <div><b>{trip.title}</b><span>{trip.city ?? trip.origin}{trip.country ? `, ${trip.country}` : ""}</span></div>
+                <small>{trip.startTime && trip.endTime ? `${trip.startTime}–${trip.endTime}` : "Saved"}</small>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <h3>Recent places</h3>
+        <p className="panel__hint">Your latest destination searches.</p>
+        {history.length === 0 ? <p className="panel__hint">Your searched destinations will show up here.</p> : (
+          <div className="pill-wrap">
+            {history.map((search) => <span className="pill" key={search.id}>{search.city ?? search.query}</span>)}
+          </div>
+        )}
+      </section>
 
       <section className="panel">
         <h3>Where are you based?</h3>

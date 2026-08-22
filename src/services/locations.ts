@@ -1,5 +1,5 @@
 import type { Location } from "../types/location";
-import type { Json } from "../types/database";
+import type { Json, SearchRow } from "../types/database";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 // ---------------------------------------------------------------------------
@@ -148,4 +148,16 @@ export async function recordSearch(params: {
     // eslint-disable-next-line no-console
     console.error("[locations] recordSearch", error);
   }
+}
+
+export async function listSearchHistory(userId: string, limit = 8): Promise<SearchRow[]> {
+  if (!isSupabaseConfigured || !userId) return [];
+  const { data, error } = await supabase
+    .from("searches")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new LocationError("We couldn't load your recent searches right now.");
+  return data ?? [];
 }

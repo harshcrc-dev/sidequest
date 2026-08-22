@@ -2690,6 +2690,54 @@
   display: grid;
   place-items: center;
 }
+
+.profile__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.profile__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.profile__stat b {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.profile__stat span,
+.profile__activity span {
+  color: var(--muted, #6f736d);
+  font-size: 0.85rem;
+}
+
+.profile__activity-list {
+  display: grid;
+  gap: 8px;
+}
+
+.profile__activity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line, #e4e3dd);
+}
+
+.profile__activity:first-child { border-top: 0; }
+.profile__activity div { display: grid; gap: 3px; min-width: 0; }
+.profile__activity b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile__activity small { color: var(--muted, #6f736d); white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .profile__stats { grid-template-columns: 1fr; }
+}
 @media (max-width: 560px) {
   .pace-row {
     grid-template-columns: 1fr;
