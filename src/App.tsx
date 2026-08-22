@@ -313,6 +313,13 @@ export default function App() {
       namedOrigin ||
       homeCity;
 
+    // A nearby escape needs an origin to choose a real destination. Ask for
+    // it before AI intent parsing so location access has a deterministic fallback.
+    if (parsed.mode === "nearby" && !origin) {
+      setCityAsk({ prompt, mode });
+      return;
+    }
+
     // The local parser is intentionally conservative. Before asking for a
     // location, let the model read natural phrases such as "a day in london".
     if (!origin) {
